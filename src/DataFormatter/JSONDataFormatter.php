@@ -118,10 +118,14 @@ class JSONDataFormatter extends DataFormatter
                     ? $this->sanitiseClassName($relClass) . '/' . $obj->$fieldName
                     : $this->sanitiseClassName($className) . "/$id/$relName";
                 $href = Director::absoluteURL($rel);
-                $serobj->$relName = ArrayData::array_to_object(array(
+                $baseFields = [
                     "className" => $relClass,
                     "href" => "$href.json",
                     "id" => self::cast($obj->obj($fieldName))
+                ];
+                $serobj->$relName = ArrayData::array_to_object(array_replace(
+                    $baseFields,
+                    method_exists($serobj, 'getApiFields') ? (array) $serobj->getApiFields($baseFields) : []
                 ));
             }
 
@@ -152,10 +156,14 @@ class JSONDataFormatter extends DataFormatter
                     }
                     $rel = $this->config()->api_base . $this->sanitiseClassName($relClass) . "/$item->ID";
                     $href = Director::absoluteURL($rel);
-                    $innerParts[] = ArrayData::array_to_object(array(
+                    $baseFields = [
                         "className" => $relClass,
                         "href" => "$href.json",
                         "id" => $item->ID
+                    ];
+                    $innerParts[] = ArrayData::array_to_object(array_replace(
+                        $baseFields,
+                        method_exists($item, 'getApiFields') ? (array) $item->getApiFields($baseFields) : []
                     ));
                 }
                 $serobj->$relName = $innerParts;

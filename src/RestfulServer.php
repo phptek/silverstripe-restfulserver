@@ -15,6 +15,7 @@ use SilverStripe\ORM\ValidationResult;
 use SilverStripe\Security\Member;
 use SilverStripe\Security\Security;
 use SilverStripe\CMS\Model\SiteTree;
+use SilverStripe\Core\Injector\Injector;
 
 /**
  * Generic RESTful server, which handles webservice access to arbitrary DataObjects.
@@ -41,6 +42,10 @@ use SilverStripe\CMS\Model\SiteTree;
  */
 class RestfulServer extends Controller
 {
+    /**
+     * @config
+     * @var array
+     */
     private static $url_handlers = array(
         '$ClassName!/$ID/$Relation' => 'handleAction',
         '' => 'notFound'
@@ -62,9 +67,23 @@ class RestfulServer extends Controller
      * If no extension is given in the request, resolve to this extension
      * (and subsequently the {@link self::$default_mimetype}.
      *
+     * @config
      * @var string
      */
     private static $default_extension = "xml";
+
+    /**
+     * Whether or not to send an additional "Location" header for POST requests
+     * to satisfy HTTP 1.1: https://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
+     *
+     * Note: With this enabled (the default), no POST request for resource creation
+     * will return an HTTP 201. Because of the addition of the "Location" header,
+     * all responses become a straight HTTP 200.
+     *
+     * @config
+     * @var boolean
+     */
+    private static $location_header_on_create = true;
 
     /**
      * If no extension is given, resolve the request to this mimetype.
@@ -300,6 +319,8 @@ class RestfulServer extends Controller
                 }
             }
             $responseFormatter->setTotalSize($objs->count());
+            $this->extend('updateRestfulGetHandler', $objs, $responseFormatter);
+
             return $responseFormatter->convertDataObjectSet($objs, $fields);
         }
 
@@ -307,6 +328,8 @@ class RestfulServer extends Controller
             $responseFormatter->setTotalSize(0);
             return $responseFormatter->convertDataObjectSet(new ArrayList(), $fields);
         }
+
+        $this->extend('updateRestfulGetHandler', $obj, $responseFormatter);
 
         return $responseFormatter->convertDataObject($obj, $fields);
     }
@@ -553,7 +576,8 @@ class RestfulServer extends Controller
         if (!singleton($className)->canCreate($this->getMember())) {
             return $this->permissionFailure();
         }
-        $obj = new $className();
+
+        $obj = Injector::inst()->create($className);
 
         $reqFormatter = $this->getRequestDataFormatter($className);
         if (!$reqFormatter) {
@@ -584,10 +608,15 @@ class RestfulServer extends Controller
             $type = ".{$types[0]}";
         }
 
-        $urlSafeClassName = $this->sanitiseClassName(get_class($obj));
-        $apiBase = $this->config()->api_base;
-        $objHref = Director::absoluteURL($apiBase . "$urlSafeClassName/$obj->ID" . $type);
-        $this->getResponse()->addHeader('Location', $objHref);
+        // Deviate slightly from the spec: Helps datamodel API access restrict
+        // to consulting just canCreate(), not canView() as a result of the additional
+        // "Location" header.
+        if ($this->config()->get('location_header_on_create')) {
+            $urlSafeClassName = $this->sanitiseClassName(get_class($obj));
+            $apiBase = $this->config()->api_base;
+            $objHref = Director::absoluteURL($apiBase . "$urlSafeClassName/$obj->ID" . $type);
+            $this->getResponse()->addHeader('Location', $objHref);
+        }
 
         return $responseFormatter->convertDataObject($obj);
     }
@@ -712,10 +741,10 @@ class RestfulServer extends Controller
         $this->getResponse()->addHeader('WWW-Authenticate', 'Basic realm="API Access"');
         $this->getResponse()->addHeader('Content-Type', 'text/plain');
 
-        $reponse = "You don't have access to this item through the API.";
-        $this->extend(__FUNCTION__, $reponse);
+        $response = "You don't have access to this item through the API.";
+        $this->extend(__FUNCTION__, $response);
 
-        return $reponse;
+        return $response;
     }
 
     /**
@@ -727,10 +756,10 @@ class RestfulServer extends Controller
         $this->getResponse()->setStatusCode(404);
         $this->getResponse()->addHeader('Content-Type', 'text/plain');
 
-        $reponse = "That object wasn't found";
-        $this->extend(__FUNCTION__, $reponse);
+        $response = "That object wasn't found";
+        $this->extend(__FUNCTION__, $response);
 
-        return $reponse;
+        return $response;
     }
 
     /**
@@ -741,10 +770,10 @@ class RestfulServer extends Controller
         $this->getResponse()->setStatusCode(405);
         $this->getResponse()->addHeader('Content-Type', 'text/plain');
 
-        $reponse = "Method Not Allowed";
-        $this->extend(__FUNCTION__, $reponse);
+        $response = "Method Not Allowed";
+        $this->extend(__FUNCTION__, $response);
 
-        return $reponse;
+        return $response;
     }
 
     /**
@@ -755,10 +784,10 @@ class RestfulServer extends Controller
         $this->response->setStatusCode(415); // Unsupported Media Type
         $this->getResponse()->addHeader('Content-Type', 'text/plain');
 
-        $reponse = "Unsupported Media Type";
-        $this->extend(__FUNCTION__, $reponse);
+        $response = "Unsupported Media Type";
+        $this->extend(__FUNCTION__, $response);
 
-        return $reponse;
+        return $response;
     }
 
     /**
