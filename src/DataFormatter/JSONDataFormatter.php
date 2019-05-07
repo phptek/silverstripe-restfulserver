@@ -10,6 +10,7 @@ use SilverStripe\ORM\DataObjectInterface;
 use SilverStripe\Control\Director;
 use SilverStripe\ORM\SS_List;
 use SilverStripe\ORM\FieldType;
+use SilverStripe\Core\ClassInfo;
 
 /**
  * Formats a DataObject's member fields into a JSON string
@@ -125,7 +126,7 @@ class JSONDataFormatter extends DataFormatter
                 ];
                 $serobj->$relName = ArrayData::array_to_object(array_replace(
                     $baseFields,
-                    method_exists($serobj, 'getApiFields') ? (array) $serobj->getApiFields($baseFields) : []
+                    ClassInfo::hasMethod($serobj, 'getApiFields') ? (array) $serobj->getApiFields($baseFields) : []
                 ));
             }
 
@@ -163,7 +164,7 @@ class JSONDataFormatter extends DataFormatter
                     ];
                     $innerParts[] = ArrayData::array_to_object(array_replace(
                         $baseFields,
-                        method_exists($item, 'getApiFields') ? (array) $item->getApiFields($baseFields) : []
+                        ClassInfo::hasMethod($item, 'getApiFields') ? (array) $item->getApiFields($baseFields) : []
                     ));
                 }
                 $serobj->$relName = $innerParts;
