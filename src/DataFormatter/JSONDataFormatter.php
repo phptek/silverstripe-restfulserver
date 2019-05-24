@@ -11,6 +11,7 @@ use SilverStripe\Control\Director;
 use SilverStripe\ORM\SS_List;
 use SilverStripe\ORM\FieldType;
 use SilverStripe\Core\ClassInfo;
+use SilverStripe\ORM\DataObject;
 
 /**
  * Formats a DataObject's member fields into a JSON string
@@ -53,7 +54,7 @@ class JSONDataFormatter extends DataFormatter
      */
     public function convertArray($array)
     {
-        return Convert::array2json($array);
+        return json_encode($array);
     }
 
     /**
@@ -66,7 +67,7 @@ class JSONDataFormatter extends DataFormatter
      */
     public function convertDataObject(DataObjectInterface $obj, $fields = null, $relations = null)
     {
-        return Convert::array2json($this->convertDataObjectToJSONObject($obj, $fields, $relations));
+        return json_encode($this->convertDataObjectToJSONObject($obj, $fields, $relations));
     }
 
     /**
@@ -114,19 +115,22 @@ class JSONDataFormatter extends DataFormatter
                 }
 
                 $fieldName = $relName . 'ID';
+                $fieldCast = self::cast($obj->obj($fieldName));
                 $rel = $this->config()->api_base;
                 $rel .= $obj->$fieldName
                     ? $this->sanitiseClassName($relClass) . '/' . $obj->$fieldName
                     : $this->sanitiseClassName($className) . "/$id/$relName";
                 $href = Director::absoluteURL($rel);
+                $hasOne = DataObject::get_by_id($relClass, $fieldCast);
                 $baseFields = [
                     "className" => $relClass,
                     "href" => "$href.json",
-                    "id" => self::cast($obj->obj($fieldName))
+                    "id" => $fieldCast,
                 ];
+
                 $serobj->$relName = ArrayData::array_to_object(array_replace(
                     $baseFields,
-                    ClassInfo::hasMethod($serobj, 'getApiFields') ? (array) $serobj->getApiFields($baseFields) : []
+                    ClassInfo::hasMethod($hasOne, 'getApiFields') ? (array) $hasOne->getApiFields($baseFields) : []
                 ));
             }
 
@@ -195,7 +199,7 @@ class JSONDataFormatter extends DataFormatter
             "items" => $items
         ));
 
-        return Convert::array2json($serobj);
+        return json_encode($serobj);
     }
 
     /**
@@ -204,7 +208,7 @@ class JSONDataFormatter extends DataFormatter
      */
     public function convertStringToArray($strData)
     {
-        return Convert::json2array($strData);
+        return json_decode($strData, true);
     }
 
     public static function cast(FieldType\DBField $dbfield)
